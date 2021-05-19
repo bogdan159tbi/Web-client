@@ -13,7 +13,16 @@
 #define LOGIN_URL "/api/v1/tema/auth/login"
 #define ACCESS_URL "/api/v1/tema/library/access"
 #define BOOKS_URL "/api/v1/tema/library/books"
- 
+#define MAX_COOKIES 100 
+#define DIE(assertion, call_description)				\
+	do {								\
+		if (assertion) {					\
+			fprintf(stderr, "(%s, %d): ",			\
+					__FILE__, __LINE__);		\
+			perror(call_description);			\
+			exit(EXIT_FAILURE);				\
+		}							\
+	} while(0)
 // shows the current error
 void error(const char *msg);
 
