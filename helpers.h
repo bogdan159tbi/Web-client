@@ -14,6 +14,7 @@
 #define ACCESS_URL "/api/v1/tema/library/access"
 #define BOOKS_URL "/api/v1/tema/library/books"
 #define MAX_COOKIES 100 
+#define BOOK_INFO_LEN 200
 #define DIE(assertion, call_description)				\
 	do {								\
 		if (assertion) {					\
