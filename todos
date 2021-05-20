@@ -1,2 +1,3 @@
-toate metodele din main sunt puse in cate o functie
-daca avem get sa facem pe langa compute_get_request si o func trateaza_get_request?
+
+daca dau delete pe un id care nu mai exista iau seg fault
+tre sa verific eu daca id ul exista ?

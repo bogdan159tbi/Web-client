@@ -290,10 +290,12 @@ int get_books(char *session_cookie, char *auth_token){
     //tre sa fac rost de cookie-ul de sesiune returnat de server
 
     message = receive_from_server(sockfd);
-    message = strstr(message, "{");
-    message[strlen(message) -1] = '\0'; // ca sa stergem ] de la sfarsit
-    puts(message);
-
+    if(message){
+        message = strstr(message, "{");
+        message[strlen(message) -1] = '\0'; // ca sa stergem ] de la sfarsit
+        puts(message);
+    } else
+        printf("nu exista nicio carte\n");
     return 0;
 }
 /*
@@ -410,19 +412,36 @@ void alloc_info_book(char **title, char **author,
 
 }
 void free_info_book(char **title, char **author,
-                    char **page_count, char **publisher, char **genre){
-                    
+                    char **page_count, char **publisher, char **genre){              
     free(*title);
     free(*author);
     free(*publisher);
     free(*genre);
     free(*page_count);
 }
+int logout(char *session_cookie, char *auth_token){
+    //cookie devine invalid la delogare
+    //daca decomentez, nu mai merge cookie -ul vechi
+    //copiez dupa alt cookie(poate expira)
+    int sockfd = open_connection(IP_SERVER, PORT_SERVER, 
+                                AF_INET, SOCK_STREAM, 0);
+    char **cookies = calloc(MAX_COOKIES, sizeof(char*));
+    DIE(!cookies, "calloc failed");
+    char *message = calloc(10000, 1);
+    DIE( message == NULL, "calloc failed\n");
+    cookies[0] = session_cookie;//sa folosesc strdup?
+    message = compute_get_request(IP_SERVER, LOGOUT_URL, NULL, cookies , 1, auth_token);
+    send_to_server(sockfd, message);
+    puts(message);
+
+    message = receive_from_server(sockfd);
+    puts(message);
+
+    return 0;
+}
 int main(int argc, char *argv[])
 {
-    char *message;
-    char *response;
-    int sockfd, result;
+    int result;
     char cmd[COMMAND_LEN];//stocheaza input terminal
     char username[USER_LEN];
     char password[PASSWORD_LEN];
@@ -460,6 +479,9 @@ int main(int argc, char *argv[])
         } else if (strstr(cmd, "delete_book")){
             result = delete_book(login_cookie ,jwt_token);
             DIE(result < 0, "deleting a book failed");
+        } else if (strstr(cmd,"logout")){
+            result = logout(login_cookie ,jwt_token);
+            DIE(result < 0, "logging out failed");
         } else 
             break;
     }

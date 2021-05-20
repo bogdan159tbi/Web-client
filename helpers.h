@@ -11,6 +11,7 @@
 #define PORT_SERVER 8080
 #define REGISTER_URL "/api/v1/tema/auth/register"
 #define LOGIN_URL "/api/v1/tema/auth/login"
+#define LOGOUT_URL "/api/v1/tema/auth/logout"
 #define ACCESS_URL "/api/v1/tema/library/access"
 #define BOOKS_URL "/api/v1/tema/library/books"
 #define MAX_COOKIES 100 
