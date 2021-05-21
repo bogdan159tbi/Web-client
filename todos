@@ -1,3 +1,12 @@
-
+########
 daca dau delete pe un id care nu mai exista iau seg fault
 tre sa verific eu daca id ul exista ?
+
+########
+daca ma conectez cu alt user
+mi afiseaza cartile userului dinainte
+-> am rezolvat asta dar daca dau login cu alt user si dau direct get_books imi afiseaza cartile celui dinainte
+-> dupa ce dau enter_library si get_books afiseaza cartile lui
+
+Am rezolvat dupa ce am facut null session cookie si auth_token in functia logout(daca pica ceva de la asta posibil sa fie ,desi nu cred)
+#######

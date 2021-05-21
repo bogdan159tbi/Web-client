@@ -14,13 +14,7 @@
 #define CONTENT_LENGTH "Content-Length: "
 #define CONTENT_LENGTH_SIZE (sizeof(CONTENT_LENGTH) - 1)
 
-struct {
-    char *title;
-    char *author;
-    char *publisher;
-    char *genre;
-    char *page_count;
-}book;
+
 void error(const char *msg)
 {
     perror(msg);

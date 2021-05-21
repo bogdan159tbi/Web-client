@@ -5,6 +5,7 @@
 #define LINELEN 1000
 #define COMMAND_LEN 1000
 #define USER_LEN 100
+#define INPUT_LEN 1000
 #define PASSWORD_LEN 100
 #define MAX_URL_LEN 300
 #define IP_SERVER "34.118.48.238"

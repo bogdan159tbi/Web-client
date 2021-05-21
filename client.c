@@ -43,16 +43,21 @@ char *json_parse_to_string(char *username, char *password) {
     */
    return serialized_string;
 }
+int read_input_stdin(char **input){
+    memset(*input, 0,INPUT_LEN);
+    fgets(*input, INPUT_LEN-1,stdin);
+    (*input)[strlen(*input) - 1] = '\0';
+
+    return 0;
+}
+
 int register_user( char *username, char *password) {
     //read data from terminal
     printf("username=");
-    memset(username, 0,USER_LEN);
-    fgets(username, USER_LEN-1,stdin);
-    username[strlen(username) - 1] = '\0';
+    read_input_stdin(&username);
+    
     printf("password=");
-    memset(password, 0, PASSWORD_LEN);
-    fgets(password, PASSWORD_LEN- 1,stdin);
-    password[strlen(password) - 1] = '\0';
+    read_input_stdin(&password);
     //finished reading username & password
     //ma folosesc de parson ca sa creez body_data?
 
@@ -60,7 +65,9 @@ int register_user( char *username, char *password) {
                                 AF_INET, SOCK_STREAM, 0);
     char *message = calloc(1000,1);
     char *string_from_json = json_parse_to_string(username, password);
-    message = compute_post_request(IP_SERVER, REGISTER_URL, "application/json", string_from_json , NULL, 0, NULL);
+    struct Request *post_request = init_post_request(IP_SERVER, REGISTER_URL, "application/json", string_from_json , NULL, 0, NULL);
+    
+    message = compute_post_request(post_request);
     send_to_server(sockfd, message);
     
     puts("###start request###");
@@ -71,6 +78,10 @@ int register_user( char *username, char *password) {
     puts(message);
     close_connection(sockfd);
     
+    //TODO :free allocated data
+    free(message);
+    // free(string_from_json); ?? tre dat free?
+    free_request(&post_request);
     return 0;
 }
 /*
@@ -84,7 +95,15 @@ int register_user( char *username, char *password) {
 • Întoarce cookie de sesiune
 • Întoarce un mesaj de eroare dacă credenţialele nu se potrivesc
 */
+int check_username(char *message){
+    JSON_Value *root_value = json_value_init_object();
+    root_value = json_parse_string(strchr(message,'{'));
 
+    JSON_Object *root_object = json_value_get_object(root_value);
+    if(json_object_get_string(root_object, "error"))
+        return 1;
+    return 0;
+}
 char *get_cookie_from_server_message(char *server_message){
     char *cookie;
     //trebuie parsat cu json sau doar pt DATA? 
@@ -94,15 +113,12 @@ char *get_cookie_from_server_message(char *server_message){
     
     return cookie;
 }
+
 int login_user(char *username, char *password, char **cookie){
     printf("username=");
-    memset(username, 0,USER_LEN);
-    fgets(username, USER_LEN-1,stdin);
-    username[strlen(username) - 1] = '\0';
+    read_input_stdin(&username);
     printf("password=");
-    memset(password, 0, PASSWORD_LEN);
-    fgets(password, PASSWORD_LEN- 1,stdin);
-    password[strlen(password) - 1] = '\0';
+    read_input_stdin(&password);
     //finished reading user & pass
     
     int sockfd = open_connection(IP_SERVER, PORT_SERVER, 
@@ -110,7 +126,10 @@ int login_user(char *username, char *password, char **cookie){
     char *message = calloc(1000,1);
     char *string_from_json = json_parse_to_string(username, password);
 
-    message = compute_post_request(IP_SERVER, LOGIN_URL, "application/json", string_from_json,NULL, 0 ,NULL);
+    struct Request *post_request = init_post_request(IP_SERVER, LOGIN_URL, "application/json", string_from_json,NULL, 0 ,NULL);
+    
+    message = compute_post_request(post_request);
+    
     send_to_server(sockfd, message);
 
     puts("###start request###");
@@ -119,12 +138,20 @@ int login_user(char *username, char *password, char **cookie){
     //tre sa fac rost de cookie-ul de sesiune returnat de server
 
     message = receive_from_server(sockfd);
-    *cookie = get_cookie_from_server_message(message);
-    if(*cookie)
-        printf("cookie este %s\n", *cookie);
+    
+    int check_account = check_username(message);
+    if(check_account == 1)
+        printf("No account with this username\n");
+    else {
+        *cookie = get_cookie_from_server_message(message);
+        if(*cookie)
+            printf("cookie este %s\n", *cookie);
+    }
     close_connection(sockfd);
 
     //free la message alocat cu calloc la linia 101 ??
+    free(message);
+    free_request(&post_request);
     return 0;
 }
 
@@ -154,7 +181,10 @@ int enter_library(char *session_cookie, char **jwt_token){
     DIE(!cookies, "calloc failed");
 
     cookies[0] = session_cookie;//sa folosesc strdup
-    message = compute_get_request(IP_SERVER, ACCESS_URL, NULL, cookies , 1, NULL);
+    struct Request *get_request = init_get_request(IP_SERVER, ACCESS_URL, NULL, cookies , 1, NULL);
+
+    printf("ianitne de compute\n");
+    message = compute_get_request(get_request);
     send_to_server(sockfd, message);
 
     puts("###start request###");
@@ -169,6 +199,9 @@ int enter_library(char *session_cookie, char **jwt_token){
     printf("Auth token este");
     puts(*jwt_token);
     
+    //TODO: free allocated data
+    free_request(&get_request);
+    free(message);
     return 0;
 }
 
@@ -249,7 +282,9 @@ int add_book(char *session_cookie, char *auth_token, char **title, char **author
 
     //add authorization header
 
-    message = compute_post_request(IP_SERVER, BOOKS_URL, "application/json", string_from_json, cookies, 1, auth_token);
+    struct Request *post_request = init_post_request(IP_SERVER, BOOKS_URL, "application/json", string_from_json, cookies, 1, auth_token);
+
+    message = compute_post_request(post_request);
     send_to_server(sockfd, message);
 
     puts("###start request###");
@@ -259,7 +294,10 @@ int add_book(char *session_cookie, char *auth_token, char **title, char **author
 
     message = receive_from_server(sockfd);
     puts(message);
-
+    //TODO: free id_book and struct book etc
+    free_request(&post_request);
+    free(message);
+    
     return 0;
 }
 /*
@@ -282,7 +320,7 @@ void get_books_from_response(char **message){
 }
 int get_books(char *session_cookie, char *auth_token){
     DIE(session_cookie == NULL, "session cookie = null");
-    DIE(auth_token == NULL, "auth token = null");
+    DIE(auth_token == NULL, "No authentication was made.Please enter library!\n");
 
     int sockfd = open_connection(IP_SERVER, PORT_SERVER, 
                                 AF_INET, SOCK_STREAM, 0);
@@ -293,7 +331,9 @@ int get_books(char *session_cookie, char *auth_token){
     DIE(!cookies, "calloc failed");
 
     cookies[0] = session_cookie;//sa folosesc strdup
-    message = compute_get_request(IP_SERVER, BOOKS_URL, NULL, cookies , 1, auth_token);
+    struct Request *get_request = init_get_request(IP_SERVER, BOOKS_URL, NULL, cookies , 1, auth_token);
+
+    message = compute_get_request(get_request);
     send_to_server(sockfd, message);
 
     puts("###start request###");
@@ -302,15 +342,17 @@ int get_books(char *session_cookie, char *auth_token){
     //tre sa fac rost de cookie-ul de sesiune returnat de server
 
     message = receive_from_server(sockfd);
-    puts(message);
-    //get_books_from_response(&message);
-
-    if(message){
-        message = strstr(message, "{");
-        message[strlen(message) -1] = '\0'; // ca sa stergem ] de la sfarsit
-        puts(message);
+    //get_books_from_response(&message); //nu stiu daca merge pentru ca am un array de jsonuri
+    char *book_list = strstr(message, "{");
+    if(book_list){
+        book_list[strlen(book_list) -1] = '\0'; // ca sa stergem ] de la sfarsit
+        puts(book_list);
+        free(message);
     } else
-        printf("nu exista nicio carte\n");
+        printf("There is no book for this user in his library.\n");
+    //TODO: free id_book and struct book etc
+    free_request(&get_request);
+    
     return 0;
 }
 /*
@@ -351,6 +393,10 @@ int get_book_info(struct book_t *new_book, char *response_server){
 
     return 0;
 }
+/*
+    1, daca server afiseaza un mesaj de eroare pt o carte inexistenta
+    0, daca server afiseaza altceva != error 
+*/
 int check_error_book(char *message){
     JSON_Value *root_value = json_value_init_object();
     root_value = json_parse_string(strchr(message,'{'));
@@ -393,7 +439,9 @@ int get_book(char *session_cookie , char *auth_token){
     strcpy(url_book, BOOKS_URL);
     strcat(url_book, "/");
     strcat(url_book, id_book);
-    message = compute_get_request(IP_SERVER, url_book, NULL, cookies , 1, auth_token);
+    struct Request *get_request = init_get_request(IP_SERVER, url_book, NULL, cookies , 1, auth_token);
+
+    message = compute_get_request(get_request);
     send_to_server(sockfd, message);
 
     puts("###start request###");
@@ -414,6 +462,7 @@ int get_book(char *session_cookie , char *auth_token){
     //TODO: free id_book and struct book etc
     free(id_book);
     free_book(book_id);
+    free_request(&get_request);
 
     return 0;
 }
@@ -425,6 +474,7 @@ int get_book(char *session_cookie , char *auth_token){
     • Întoarce un mesaj de eroare dacă nu demonstraţi că aveţi acces la bibliotecă
     • Întoarce un mesaj de eroare dacă id-ul pentru care efectuaţi cererea este invalid
 */
+
 int delete_book(char *session_cookie , char *auth_token){
     printf("id=");
     char *id_book = calloc(BOOK_INFO_LEN, 1);
@@ -444,7 +494,10 @@ int delete_book(char *session_cookie , char *auth_token){
     strcpy(url_book, BOOKS_URL);
     strcat(url_book, "/");
     strcat(url_book, id_book);
-    message = compute_delete_request(IP_SERVER, url_book, "application/json", cookies, 1, auth_token);;
+
+    struct Request * delete_request = init_delete_request(IP_SERVER, url_book, "application/json", cookies, 1, auth_token);;
+
+    message = compute_delete_request(delete_request);
     send_to_server(sockfd, message);
 
     puts("###start request###");
@@ -452,8 +505,18 @@ int delete_book(char *session_cookie , char *auth_token){
     puts("###end of request###");
 
     message = receive_from_server(sockfd);
+    int book_exists = check_error_book(message);
+
     //TODO: sa stilizez mesajul primit de la server
-    puts(message);
+    if(book_exists == 1){
+        printf("Book with ID = %s doesn't exist in your library!\n", id_book);
+    } else{ 
+        puts(message);
+        //afiseaza un mesaj de succes in rest?
+    }
+    free(message);
+    free(id_book);
+    free_request(&delete_request);
 
     return 0;
 }
@@ -484,7 +547,7 @@ void free_info_book(char **title, char **author,
     free(*genre);
     free(*page_count);
 }
-int logout(char *session_cookie, char *auth_token){
+int logout(char **session_cookie, char **auth_token){
     //cookie devine invalid la delogare
     //daca decomentez, nu mai merge cookie -ul vechi
     //copiez dupa alt cookie(poate expira)
@@ -494,13 +557,23 @@ int logout(char *session_cookie, char *auth_token){
     DIE(!cookies, "calloc failed");
     char *message = calloc(10000, 1);
     DIE( message == NULL, "calloc failed\n");
-    cookies[0] = session_cookie;//sa folosesc strdup?
-    message = compute_get_request(IP_SERVER, LOGOUT_URL, NULL, cookies , 1, auth_token);
+    cookies[0] = *session_cookie;//sa folosesc strdup?
+
+    struct Request *get_request = init_get_request(IP_SERVER, LOGOUT_URL, NULL, cookies , 1, *auth_token);
+
+    message = compute_get_request(get_request);
+    
     send_to_server(sockfd, message);
     puts(message);
 
     message = receive_from_server(sockfd);
     puts(message);
+
+    *session_cookie = NULL;
+    *auth_token = NULL;
+
+    free(message);
+    free_request(&get_request);
 
     return 0;
 }
@@ -545,10 +618,12 @@ int main(int argc, char *argv[])
             result = delete_book(login_cookie ,jwt_token);
             DIE(result < 0, "deleting a book failed");
         } else if (strstr(cmd,"logout")){
-            result = logout(login_cookie ,jwt_token);
+            result = logout(&login_cookie , &jwt_token);
             DIE(result < 0, "logging out failed");
-        } else 
+        } else if (strstr(cmd, "exit"))
             break;
+        else 
+            printf("Incorrect cmd.Try again!\n");
     }
     // free the allocated data at the end!
     free_info_book(&title, &author, &page_count, &
