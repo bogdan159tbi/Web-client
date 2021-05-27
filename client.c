@@ -35,7 +35,7 @@ char *json_parse_to_string(char *username, char *password) {
     json_object_set_string(root_object, "password", password);
     char *serialized_string;
     serialized_string = json_serialize_to_string_pretty(root_value);
-    puts(serialized_string);
+    //puts(serialized_string);
     //tre sa le dau free neaparat
     /*
     json_free_serialized_string(serialized_string);
@@ -50,7 +50,22 @@ int read_input_stdin(char **input){
 
     return 0;
 }
+/**
+ * 1 daca s a inregistrat un nou user
+ * 0 daca username e deja luat si afisez mesajul de eroare primit de la server
+ **/
+int check_username_taken(char *message){
+    JSON_Value *root_value = json_value_init_object();
+    root_value = json_parse_string(strchr(message,'{'));
 
+    JSON_Object *root_object = json_value_get_object(root_value);
+    if(json_object_get_string(root_object, "error")){
+        printf("error: %s\n",json_object_get_string(root_object, "error"));
+        puts("Try using another username");
+        return 0;
+    }
+    return 1;
+}
 int register_user( char *username, char *password) {
     //read data from terminal
     printf("username=");
@@ -70,12 +85,16 @@ int register_user( char *username, char *password) {
     message = compute_post_request(post_request);
     send_to_server(sockfd, message);
     
-    puts("###start request###");
-    puts(message);
-    puts("###end of request###");
+    //puts("###start request###");
+    //puts(message);
+    //puts("###end of request###");
+    printf("Trying to register user: %s\n", username);
     
     message = receive_from_server(sockfd);
-    puts(message);
+    int res = check_username_taken(message);
+    if(res){
+        printf("User %s created successfully\n", username);
+    } 
     close_connection(sockfd);
     
     //TODO :free allocated data
@@ -132,11 +151,10 @@ int login_user(char *username, char *password, char **cookie){
     
     send_to_server(sockfd, message);
 
-    puts("###start request###");
-    puts(message);
-    puts("###end of request###");
-    //tre sa fac rost de cookie-ul de sesiune returnat de server
-
+    //puts("###start request###");
+    //puts(message);
+    //puts("###end of request###");
+    printf("Trying to log in user : %s\nThis should not take too long!\n", username);
     message = receive_from_server(sockfd);
     
     int check_account = check_username(message);
@@ -144,8 +162,11 @@ int login_user(char *username, char *password, char **cookie){
         printf("No account with this username\n");
     else {
         *cookie = get_cookie_from_server_message(message);
+        printf("User %s logged in successfully!\n",username);
+        /*
         if(*cookie)
             printf("cookie este %s\n", *cookie);
+        */
     }
     close_connection(sockfd);
 
@@ -155,13 +176,6 @@ int login_user(char *username, char *password, char **cookie){
     return 0;
 }
 
-/*
-Cerere de acces in bibliotecă
-• Ruta de acces: GET /api/v1/tema/library/access
-• Trebuie sa demonstraţi că sunteţi autentificaţi => folosesc cookie de sesiune returnat la login
-• Întoarce un token JWT, care demonstrează accesul la bibliotecă = pastrez jwt pentru mai tarziu,l trimit ca parametru
-• Întoarce un mesaj de eroare dacă nu demonstraţi că sunteţi autentificaţi => daca return 0 -> totul e OK
-*/
 void get_token_from_response(char *server_message, char **token){
     JSON_Value *root_value = json_value_init_object();
     root_value = json_parse_string(strchr(server_message,'{'));
@@ -169,9 +183,27 @@ void get_token_from_response(char *server_message, char **token){
     JSON_Object *root_object = json_value_get_object(root_value);
     *token = (char*)json_object_get_string(root_object, "token");
 }
+/**
+ * 1 daca s a realizatat intrarea in librarie
+ * 0 altfel
+ **/
+int check_entry_library(char *message){
+    char *tok = strtok(message,"\n");
+    if(strstr(tok,"OK"))
+        return 1;
+    return 0;
+}
+/*
+Cerere de acces in bibliotecă
+• Ruta de acces: GET /api/v1/tema/library/access
+• Trebuie sa demonstraţi că sunteţi autentificaţi => folosesc cookie de sesiune returnat la login
+• Întoarce un token JWT, care demonstrează accesul la bibliotecă = pastrez jwt pentru mai tarziu,l trimit ca parametru
+• Întoarce un mesaj de eroare dacă nu demonstraţi că sunteţi autentificaţi => daca return 0 -> totul e OK
+*/
+
 int enter_library(char *session_cookie, char **jwt_token){
 
-    DIE(session_cookie == NULL, "session cookie = null");
+    DIE(session_cookie == NULL, "Try logging in before!");
     int sockfd = open_connection(IP_SERVER, PORT_SERVER, 
                                 AF_INET, SOCK_STREAM, 0);
     char *message = calloc(10000, 1);
@@ -183,22 +215,24 @@ int enter_library(char *session_cookie, char **jwt_token){
     cookies[0] = session_cookie;//sa folosesc strdup
     struct Request *get_request = init_get_request(IP_SERVER, ACCESS_URL, NULL, cookies , 1, NULL);
 
-    printf("ianitne de compute\n");
     message = compute_get_request(get_request);
     send_to_server(sockfd, message);
-
-    puts("###start request###");
-    puts(message);
-    puts("###end of request###");
-    //tre sa fac rost de cookie-ul de sesiune returnat de server
-    
+//
+    //puts("###start request###");
+    //puts(message);
+    //puts("###end of request###");
+    printf("Entering the library...\n");    
     message = receive_from_server(sockfd);
     get_token_from_response(message, jwt_token);
     DIE(!(*jwt_token) ,"token e null\n");
-    
+    if(check_entry_library(message)){
+        printf("Welcome to the library!\n");
+    } else
+        printf("Access not allowed in the library!\n");
+    /*
     printf("Auth token este");
     puts(*jwt_token);
-    
+    */
     //TODO: free allocated data
     free_request(&get_request);
     free(message);
@@ -247,6 +281,16 @@ char *book_to_json(char *title, char *author, char *genre,
     • Întoarce un mesaj de eroare dacă nu demonstraţi că aveţi acces la bibliotecă
     • Întoarce un mesaj de eroare dacă informaţiile introduse sunt incomplete sau nu respectă formatarea
 */
+/*
+    1 daca cartea a fost adaugata cu succes
+    0 altfel
+*/
+int check_successful_response(char *message){
+    if (strstr(message, "OK"))
+        return 1;
+    
+    return 0;
+}
 int add_book(char *session_cookie, char *auth_token, char **title, char **author,
             char **genre, char **page_count, char **publisher){
     
@@ -287,13 +331,20 @@ int add_book(char *session_cookie, char *auth_token, char **title, char **author
     message = compute_post_request(post_request);
     send_to_server(sockfd, message);
 
-    puts("###start request###");
-    puts(message);
-    puts("###end of request###");
-    //tre sa fac rost de cookie-ul de sesiune returnat de server
+    //puts("###start request###");
+    //puts(message);
+    //puts("###end of request###");
+    printf("Adding book: \" %s \" in the library..\n", *title);
 
     message = receive_from_server(sockfd);
-    puts(message);
+    //puts(message);
+    int result = check_successful_response(message);
+    if(result){
+        printf("Book \" %s \" was added to your library!\n", *title);     
+    } else {
+        printf("Book \" %s \" was NOT added to your library\n", *title);
+    }
+    
     //TODO: free id_book and struct book etc
     free_request(&post_request);
     free(message);
@@ -336,10 +387,10 @@ int get_books(char *session_cookie, char *auth_token){
     message = compute_get_request(get_request);
     send_to_server(sockfd, message);
 
-    puts("###start request###");
-    puts(message);
-    puts("###end of request###");
-    //tre sa fac rost de cookie-ul de sesiune returnat de server
+    //puts("###start request###");
+    //puts(message);
+    //puts("###end of request###");
+    printf("Getting books from the library...This should not take too long!\n");
 
     message = receive_from_server(sockfd);
     //get_books_from_response(&message); //nu stiu daca merge pentru ca am un array de jsonuri
@@ -443,11 +494,11 @@ int get_book(char *session_cookie , char *auth_token){
 
     message = compute_get_request(get_request);
     send_to_server(sockfd, message);
-
-    puts("###start request###");
-    puts(message);
-    puts("###end of request###");
-
+//
+    //puts("###start request###");
+    //puts(message);
+    //puts("###end of request###");
+    printf("Getting book with id: %s from the library!\n", id_book);
     message = receive_from_server(sockfd);
     int exists =  check_error_book(message);
     struct book_t *book_id = calloc(sizeof(struct book_t), 1);
@@ -464,6 +515,16 @@ int get_book(char *session_cookie , char *auth_token){
     free_book(book_id);
     free_request(&get_request);
 
+    return 0;
+}
+/*
+    1, daca s a sters cu success cartea
+    0, altfel
+*/
+int check_delete_success(char *message){
+    char *tok = strtok(message,"\n");
+    if(strstr(tok, "OK"))
+        return 1;
     return 0;
 }
 /*
@@ -499,11 +560,11 @@ int delete_book(char *session_cookie , char *auth_token){
 
     message = compute_delete_request(delete_request);
     send_to_server(sockfd, message);
-
-    puts("###start request###");
-    puts(message);
-    puts("###end of request###");
-
+//
+    //puts("###start request###");
+    //puts(message);
+    //puts("###end of request###");
+    printf("Deleting book with ID = %s from the library\n", id_book);
     message = receive_from_server(sockfd);
     int book_exists = check_error_book(message);
 
@@ -511,8 +572,11 @@ int delete_book(char *session_cookie , char *auth_token){
     if(book_exists == 1){
         printf("Book with ID = %s doesn't exist in your library!\n", id_book);
     } else{ 
-        puts(message);
-        //afiseaza un mesaj de succes in rest?
+        //puts(message);
+        if(check_delete_success(message))
+            printf("Book with ID = %s was successfully deleted\n", id_book);
+        else
+            printf("Book with id = %s could NOT have been deleted.\n",id_book);
     }
     free(message);
     free(id_book);
@@ -547,6 +611,16 @@ void free_info_book(char **title, char **author,
     free(*genre);
     free(*page_count);
 }
+/**
+ * 1,daca s a delogat cu succes
+ * 0 altfel
+ * */
+int check_logout(char *message){
+    char *tok = strtok(message, "\n");
+    if(strstr(tok,"OK"))
+        return 1;
+    return 0;
+}
 int logout(char **session_cookie, char **auth_token){
     //cookie devine invalid la delogare
     //daca decomentez, nu mai merge cookie -ul vechi
@@ -564,11 +638,17 @@ int logout(char **session_cookie, char **auth_token){
     message = compute_get_request(get_request);
     
     send_to_server(sockfd, message);
-    puts(message);
-
+    //puts(message);
+    printf("Trying to log out user from the library\n");
     message = receive_from_server(sockfd);
-    puts(message);
-
+    //puts(message);
+    int result = check_logout(message);
+    if(result){
+        printf("User logged out successfully.See you next time!\n");
+    } else{
+        printf("User could NOT log out from the library\n.Try again!\n");
+        puts(message);
+    }
     *session_cookie = NULL;
     *auth_token = NULL;
 
