@@ -40,16 +40,11 @@ void free_request(struct Request **request){
         free((*request)->body_data);
     if((*request)->query_params)
         free((*request)->query_params);
-    //Le eliberez la sfarsitul programului
-    //pentru ca mai am nevoie de cookie si auth_token pe parcurs
-    /*
-    if((*request)->auth_token)
-        free((*request)->auth_token);
-    if((*request)->cookies_array)
-        free((*request)->cookies_array);
-    */
     free((*request));
 }
+/*
+  Adauga bearer de token si cookie-ul obtinut in urma apelului de functie register_user  
+*/
 void add_session_auth(struct Cookies *cookies_array, char *auth_token,
                      char **line, char **message)
 {
